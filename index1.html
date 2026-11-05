@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mafia Noir — Anti-Peek Party Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <style>
+    body { background-color: #090a0f; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; }
+    .glass { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+    .pulse-ring { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-4 select-none">
+
+  <!-- Header -->
+  <header class="w-full max-w-md flex items-center justify-between py-2 border-b border-slate-800">
+    <div class="flex items-center gap-2">
+      <span class="text-red-500 text-xl font-black tracking-wider">🕵️ MAFIA NOIR</span>
+    </div>
+    <div id="roomBadge" class="hidden px-3 py-1 rounded-full bg-slate-800 text-xs font-mono text-amber-400 border border-amber-500/30">
+      ROOM: <span id="badgeCode" class="font-bold">----</span>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="w-full max-w-md flex-1 flex flex-col justify-center my-4">
+
+    <!-- SCREEN 1: JOIN / CREATE -->
+    <section id="screenHome" class="glass rounded-2xl p-6 space-y-5 shadow-2xl">
+      <div class="text-center space-y-1">
+        <h1 class="text-2xl font-bold text-white">No-Peek Multi-Phone Mafia</h1>
+        <p class="text-xs text-slate-400">Everyone plays on their own browser. No closing eyes required.</p>
+      </div>
+
+      <div class="space-y-3">
+        <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold">Your Name</label>
+        <input id="playerNameInput" type="text" placeholder="Enter your name..." maxlength="14"
+          class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-red-500" />
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 pt-2">
+        <button onclick="createRoom()" class="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 font-bold text-white shadow-lg shadow-red-900/40 transition">
+          👑 Host New Game
+        </button>
+
+        <div class="relative flex py-2 items-center">
+          <div class="flex-grow border-t border-slate-800"></div>
+          <span class="flex-shrink mx-3 text-slate-500 text-xs uppercase">OR JOIN FRIENDS</span>
+          <div class="flex-grow border-t border-slate-800"></div>
+        </div>
+
+        <div class="flex gap-2">
+          <input id="roomCodeInput" type="text" placeholder="4-Letter Code" maxlength="4"
+            class="w-1/2 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-center font-mono uppercase tracking-widest text-lg text-amber-400 focus:outline-none focus:border-amber-500" />
+          <button onclick="joinRoom()" class="w-1/2 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition">
+            Join Room →
+          </button>
+        </div>
+      </div>
+      <p id="statusMsg" class="text-center text-xs text-amber-400 min-h-[1rem]"></p>
+    </section>
+
+    <!-- SCREEN 2: LOBBY -->
+    <section id="screenLobby" class="hidden glass rounded-2xl p-6 space-y-5 shadow-2xl">
+      <div class="text-center bg-slate-900/90 p-4 rounded-xl border border-slate-800">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Share Room Code</p>
+        <div id="lobbyCodeDisplay" class="text-4xl font-mono font-black tracking-widest text-amber-400 my-1">----</div>
+        <button onclick="copyShareLink()" class="mt-1 text-xs text-sky-400 underline">📋 Copy Direct Invite Link</button>
+      </div>
+
+      <div>
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Players Connected</span>
+          <span id="playerCount" class="text-xs font-bold px-2 py-0.5 bg-slate-800 rounded text-slate-300">1</span>
+        </div>
+        <ul id="lobbyPlayerList" class="space-y-2 max-h-44 overflow-y-auto pr-1"></ul>
+      </div>
+
+      <!-- Host Role Setup & Controls -->
+      <div id="hostControls" class="hidden space-y-3 pt-3 border-t border-slate-800">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Special Roles (Host Setup)</p>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
+            <input type="checkbox" id="toggleDoc" checked onchange="updateSettings()" class="accent-emerald-500" />
+            <span>💉 Doctor</span>
+          </label>
+          <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
+            <input type="checkbox" id="toggleDet" checked onchange="updateSettings()" class="accent-sky-500" />
+            <span>🔍 Detective</span>
+          </label>
+          <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
+            <input type="checkbox" id="toggleJester" onchange="updateSettings()" class="accent-fuchsia-500" />
+            <span>🤡 Jester</span>
+          </label>
+          <label class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
+            <input type="checkbox" id="toggleSK" onchange="updateSettings()" class="accent-purple-500" />
+            <span>🔪 Serial Killer</span>
+          </label>
+        </div>
+
+        <div class="flex justify-between text-[11px] text-slate-400 pt-1">
+          <span>Active Deck:</span>
+          <span id="roleBreakdownPreview" class="text-amber-400 font-medium">1 Mafia, 1 Doc, 1 Det</span>
+        </div>
+
+        <button onclick="startGame()" class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-white shadow-lg transition">
+          🚀 Deal Secret Roles & Start
+        </button>
+      </div>
+
+      <div id="guestLobbyNotice" class="text-center space-y-1 py-2">
+        <p id="guestRolePreview" class="text-xs text-amber-400 font-medium"></p>
+        <p class="text-xs text-slate-400 pulse-ring">Waiting for the Host to start the game...</p>
+      </div>
+    </section>
+
+    <!-- SCREEN 3: ACTIVE GAME -->
+    <section id="screenGame" class="hidden glass rounded-2xl p-5 space-y-4 shadow-2xl">
+      <!-- Top Status Bar -->
+      <div class="flex items-center justify-between bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-800">
+        <div>
+          <span id="phaseTitle" class="text-sm font-extrabold uppercase tracking-wider text-indigo-400">🌙 NIGHT PHASE</span>
+          <p id="phaseSub" class="text-[11px] text-slate-400">Everyone keep looking at your phone!</p>
+        </div>
+        <button onclick="toggleRolePeek()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 border border-slate-700">
+          👁️ Tap Role
+        </button>
+      </div>
+
+      <!-- Secret Role Drawer -->
+      <div id="roleCard" class="hidden p-4 rounded-xl bg-gradient-to-br from-slate-900 to-slate-800 border border-amber-500/40 text-center space-y-1">
+        <p class="text-[11px] uppercase tracking-widest text-slate-400">Your Secret Identity</p>
+        <h2 id="myRoleName" class="text-2xl font-black text-amber-400">VILLAGER</h2>
+        <p id="myRoleDesc" class="text-xs text-slate-300"></p>
+        <p id="mafiaTeammates" class="text-xs text-red-400 font-semibold pt-1"></p>
+      </div>
+
+      <!-- Overnight / Day Announcement Banner -->
+      <div id="announcementBox" class="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800 text-xs text-slate-200 leading-relaxed">
+        Welcome to town. Tap <b>Tap Role</b> above to privately check your assignment, then complete your night task below.
+      </div>
+
+      <!-- DYNAMIC ACTION AREA -->
+      <div id="actionArea" class="space-y-3 pt-1"></div>
+
+      <!-- Host Skip / Force Next Phase -->
+      <div id="hostForceBox" class="hidden pt-3 border-t border-slate-800/80 flex justify-between items-center">
+        <span class="text-[11px] text-slate-500">Host Moderator Controls</span>
+        <button onclick="hostForceResolve()" class="px-3 py-1 rounded bg-slate-800 text-[11px] text-slate-300 hover:bg-slate-700">
+          Force Resolve Phase →
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="text-[11px] text-slate-600 text-center py-2">
+    100% Standalone Browser P2P • No App Install Required
+  </footer>
+
+<script>
+const APP_PREFIX = "MAFIANOIR26_";
+let peer = null;
+let isHost = false;
+let myId = null;
+let myName = "";
+let roomCode = "";
+let hostConn = null;
+let clientConns = {};
+
+let gameState = {
+  phase: "LOBBY",
+  round: 1,
+  announcement: "",
+  winner: null,
+  settings: { doc: true, det: true, jester: false, sk: false },
+  players: [], // { id, name, role, alive, nightDone, dayVote }
+  nightActions: { mafiaTarget: null, skTarget: null, docSave: null },
+  detectiveResult: {}
+};
+
+window.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("room")) {
+    document.getElementById("roomCodeInput").value = params.get("room").toUpperCase();
+  }
+});
+
+function setStatus(msg) {
+  document.getElementById("statusMsg").innerText = msg;
+}
+
+function randomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 4; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+/* Fisher-Yates True Random Shuffle (Fixes Mafia bias bug) */
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+/* ---------------- HOST & GUEST SETUP ---------------- */
+function createRoom() {
+  myName = document.getElementById("playerNameInput").value.trim() || "Host";
+  roomCode = randomCode();
+  setStatus("Creating room " + roomCode + "...");
+
+  peer = new Peer(APP_PREFIX + roomCode);
+  peer.on("open", (id) => {
+    isHost = true;
+    myId = id;
+    gameState.players = [{
+      id: myId, name: myName, role: "VILLAGER", alive: true,
+      nightDone: false, dayVote: null
+    }];
+    enterLobbyUI();
+  });
+
+  peer.on("connection", (conn) => {
+    conn.on("open", () => {
+      clientConns[conn.peer] = conn;
+      // Send immediate state sync upon new connection
+      conn.send({ type: "STATE_SYNC", state: gameState });
+    });
+    conn.on("data", (data) => handleHostIncomingData(conn.peer, data));
+    conn.on("close", () => { delete clientConns[conn.peer]; });
+  });
+
+  peer.on("error", (err) => setStatus("Error: " + err.type + ". Try a different room code or refresh."));
+}
+
+function joinRoom() {
+  myName = document.getElementById("playerNameInput").value.trim();
+  const code = document.getElementById("roomCodeInput").value.trim().toUpperCase();
+  if (!myName) return setStatus("Please enter your name first!");
+  if (code.length !== 4) return setStatus("Enter a valid 4-letter room code.");
+
+  roomCode = code;
+  setStatus("Connecting to Room " + roomCode + "...");
+
+  peer = new Peer();
+  peer.on("open", (id) => {
+    myId = id;
+    hostConn = peer.connect(APP_PREFIX + roomCode, { reliable: true });
+
+    hostConn.on("open", () => {
+      hostConn.send({ type: "JOIN", name: myName, id: myId });
+      enterLobbyUI();
+    });
+
+    hostConn.on("data", (data) => {
+      if (data.type === "STATE_SYNC") {
+        gameState = data.state;
+        renderFromState();
+      }
+    });
+
+    hostConn.on("close", () => {
+      alert("Disconnected from Host.");
+      location.reload();
+    });
+  });
+
+  peer.on("error", () => setStatus("Could not find Room " + roomCode + ". Check if host is online."));
+}
+
+function updateSettings() {
+  if (!isHost) return;
+  gameState.settings = {
+    doc: document.getElementById("toggleDoc").checked,
+    det: document.getElementById("toggleDet").checked,
+    jester: document.getElementById("toggleJester").checked,
+    sk: document.getElementById("toggleSK").checked
+  };
+  broadcastState();
+}
+
+/* ---------------- HOST ROUTER ---------------- */
+function handleHostIncomingData(peerId, data) {
+  if (data.type === "JOIN") {
+    const actualId = data.id || peerId;
+    const existing = gameState.players.find(p => p.id === actualId);
+    if (!existing && gameState.phase === "LOBBY") {
+      gameState.players.push({
+        id: actualId, name: data.name.slice(0, 14), role: "VILLAGER",
+        alive: true, nightDone: false, dayVote: null
+      });
+      broadcastState();
+    }
+  }
+
+  if (data.type === "NIGHT_ACTION") {
+    const p = gameState.players.find(x => x.id === peerId);
+    if (!p || !p.alive || gameState.phase !== "NIGHT") return;
+
+    if (p.role === "MAFIA") gameState.nightActions.mafiaTarget = data.targetId;
+    if (p.role === "SERIAL_KILLER") gameState.nightActions.skTarget = data.targetId;
+    if (p.role === "DOCTOR") gameState.nightActions.docSave = data.targetId;
+    if (p.role === "DETECTIVE") {
+      const target = gameState.players.find(x => x.id === data.targetId);
+      if (target) {
+        const isThreat = target.role === "MAFIA" || target.role === "SERIAL_KILLER";
+        gameState.detectiveResult[peerId] =
+          `${target.name} is ${isThreat ? "🚨 DANGEROUS (Mafia / SK)!" : "✅ INNOCENT."}`;
+      }
+    }
+    p.nightDone = true;
+    checkAllNightDone();
+    broadcastState();
+  }
+
+  if (data.type === "DAY_VOTE") {
+    const p = gameState.players.find(x => x.id === peerId);
+    if (!p || !p.alive || gameState.phase !== "DAY") return;
+    p.dayVote = data.targetId;
+    checkAllDayVoted();
+    broadcastState();
+  }
+}
+
+function sendToHost(payload) {
+  if (isHost) handleHostIncomingData(myId, payload);
+  else if (hostConn && hostConn.open) hostConn.send(payload);
+}
+
+function broadcastState() {
+  if (!isHost) return;
+  Object.values(clientConns).forEach(conn => {
+    if (conn.open) conn.send({ type: "STATE_SYNC", state: gameState });
+  });
+  renderFromState();
+}
+
+/* ---------------- GAME LOGIC ---------------- */
+function buildRolePool(count, s) {
+  const mafiaCount = count >= 8 ? 2 : 1;
+  let roles = [];
+  for (let i = 0; i < mafiaCount; i++) roles.push("MAFIA");
+  if (s.doc && roles.length < count - 1) roles.push("DOCTOR");
+  if (s.det && roles.length < count - 1) roles.push("DETECTIVE");
+  if (s.jester && roles.length < count - 1) roles.push("JESTER");
+  if (s.sk && roles.length < count - 1) roles.push("SERIAL_KILLER");
+  while (roles.length < count) roles.push("VILLAGER");
+  return shuffleArray(roles); // Perfectly random shuffle using Fisher-Yates
+}
+
+function startGame() {
+  if (!isHost) return;
+  const count = gameState.players.length;
+  if (count < 3) return alert("Add at least 3 players to start!");
+
+  let roles = buildRolePool(count, gameState.settings);
+
+  gameState.players.forEach((p, idx) => {
+    p.role = roles[idx];
+    p.alive = true;
+    p.nightDone = false;
+    p.dayVote = null;
+  });
+
+  gameState.phase = "NIGHT";
+  gameState.round = 1;
+  gameState.winner = null;
+  gameState.nightActions = { mafiaTarget: null, skTarget: null, docSave: null };
+  gameState.detectiveResult = {};
+  gameState.announcement = "Night 1 has begun. Everyone look at your phone and complete your secret task so nobody knows who holds a special role!";
+
+  broadcastState();
+}
+
+function checkAllNightDone() {
+  const alive = gameState.players.filter(p => p.alive);
+  if (alive.every(p => p.nightDone)) resolveNightPhase();
+}
+
+function resolveNightPhase() {
+  const { mafiaTarget, skTarget, docSave } = gameState.nightActions;
+  const targets = new Set();
+  if (mafiaTarget) targets.add(mafiaTarget);
+  if (skTarget) targets.add(skTarget);
+
+  let killedNames = [];
+  let savedSomeone = false;
+
+  targets.forEach(tId => {
+    if (tId === docSave) {
+      savedSomeone = true;
+    } else {
+      const victim = gameState.players.find(p => p.id === tId && p.alive);
+      if (victim) {
+        victim.alive = false;
+        killedNames.push(victim.name);
+      }
+    }
+  });
+
+  let msg = "☀️ Morning has broken! ";
+  if (killedNames.length > 0) {
+    msg += `Tragedy struck overnight—<b>${killedNames.join(" & ")}</b> eliminated! `;
+  }
+  if (savedSomeone) {
+    msg += `💉 The Doctor pulled off a miracle save overnight! `;
+  }
+  if (killedNames.length === 0 && !savedSomeone) {
+    msg += `A strangely quiet night passed with zero casualties.`;
+  }
+
+  gameState.announcement = msg;
+  if (checkWinCondition()) return;
+
+  gameState.phase = "DAY";
+  gameState.players.forEach(p => { p.dayVote = null; });
+}
+
+function checkAllDayVoted() {
+  const alive = gameState.players.filter(p => p.alive);
+  if (alive.every(p => p.dayVote !== null)) resolveDayPhase();
+}
+
+function resolveDayPhase() {
+  const tally = {};
+  gameState.players.filter(p => p.alive).forEach(p => {
+    if (p.dayVote && p.dayVote !== "SKIP") {
+      tally[p.dayVote] = (tally[p.dayVote] || 0) + 1;
+    }
+  });
+
+  let topTarget = null;
+  let maxVotes = 0;
+  let tie = false;
+
+  for (const [targetId, votes] of Object.entries(tally)) {
+    if (votes > maxVotes) {
+      maxVotes = votes;
+      topTarget = targetId;
+      tie = false;
+    } else if (votes === maxVotes) {
+      tie = true;
+    }
+  }
+
+  if (topTarget && !tie) {
+    const exiled = gameState.players.find(p => p.id === topTarget);
+    if (exiled) {
+      exiled.alive = false;
+
+      if (exiled.role === "JESTER") {
+        gameState.phase = "GAMEOVER";
+        gameState.announcement = `🤡 <b>${exiled.name}</b> was exiled by the Town—and revealed as the JESTER!`;
+        gameState.winner = `🤡 JESTER WINS SOLO! ${exiled.name} tricked the Town into voting them out!`;
+        return;
+      }
+
+      gameState.announcement = `⚖️ The Town voted to exile <b>${exiled.name}</b> (${exiled.role.replace("_", " ")}). Night falls once again...`;
+    }
+  } else {
+    gameState.announcement = `⚖️ The vote ended in a tie or skip. Nobody was exiled today. Night falls...`;
+  }
+
+  if (checkWinCondition()) return;
+
+  gameState.phase = "NIGHT";
+  gameState.round += 1;
+  gameState.nightActions = { mafiaTarget: null, skTarget: null, docSave: null };
+  gameState.players.forEach(p => { p.nightDone = false; });
+}
+
+function checkWinCondition() {
+  const alive = gameState.players.filter(p => p.alive);
+  const mafiaAlive = alive.filter(p => p.role === "MAFIA").length;
+  const skAlive = alive.filter(p => p.role === "SERIAL_KILLER").length;
+  const othersAlive = alive.length - mafiaAlive - skAlive;
+
+  if (mafiaAlive === 0 && skAlive === 0) {
+    gameState.phase = "GAMEOVER";
+    gameState.winner = "🎉 TOWN WINS! All Mafia and Serial Killers have been eliminated!";
+    return true;
+  }
+
+  if (skAlive > 0 && mafiaAlive === 0 && alive.length <= 2) {
+    gameState.phase = "GAMEOVER";
+    gameState.winner = "🔪 SERIAL KILLER WINS! Nobody is left who can stop them!";
+    return true;
+  }
+
+  if (mafiaAlive > 0 && skAlive === 0 && mafiaAlive >= othersAlive) {
+    gameState.phase = "GAMEOVER";
+    gameState.winner = "🕶️ MAFIA WINS! The Mafia now controls the Town!";
+    return true;
+  }
+
+  return false;
+}
+
+function hostForceResolve() {
+  if (!isHost) return;
+  if (gameState.phase === "NIGHT") resolveNightPhase();
+  else if (gameState.phase === "DAY") resolveDayPhase();
+  broadcastState();
+}
+
+/* ---------------- UI RENDERING ---------------- */
+function enterLobbyUI() {
+  document.getElementById("screenHome").classList.add("hidden");
+  document.getElementById("screenLobby").classList.remove("hidden");
+  document.getElementById("roomBadge").classList.remove("hidden");
+  document.getElementById("badgeCode").innerText = roomCode;
+  document.getElementById("lobbyCodeDisplay").innerText = roomCode;
+
+  if (isHost) {
+    document.getElementById("hostControls").classList.remove("hidden");
+    document.getElementById("guestLobbyNotice").classList.add("hidden");
+  }
+  renderFromState();
+}
+
+function toggleRolePeek() {
+  document.getElementById("roleCard").classList.toggle("hidden");
+}
+
+function renderFromState() {
+  if (gameState.phase === "LOBBY") {
+    document.getElementById("playerCount").innerText = gameState.players.length;
+    const list = document.getElementById("lobbyPlayerList");
+    list.innerHTML = gameState.players.map((p, i) => `
+      <li class="flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-sm">
+        <span class="font-medium text-white">${i === 0 ? "👑 " : "👤 "}${p.name}</span>
+        <span class="text-[11px] text-emerald-400">Ready</span>
+      </li>
+    `).join("");
+
+    const s = gameState.settings;
+    const c = gameState.players.length;
+    const parts = [`${c >= 8 ? 2 : 1} Mafia`];
+    if (s.doc) parts.push("1 Doc");
+    if (s.det) parts.push("1 Det");
+    if (s.jester) parts.push("1 Jester");
+    if (s.sk) parts.push("1 Serial Killer");
+    const summaryText = parts.join(", ");
+
+    document.getElementById("roleBreakdownPreview").innerText = summaryText;
+    document.getElementById("guestRolePreview").innerText = "Roles Active: " + summaryText;
+    return;
+  }
+
+  document.getElementById("screenLobby").classList.add("hidden");
+  document.getElementById("screenGame").classList.remove("hidden");
+  document.getElementById("hostForceBox").classList.toggle("hidden", !(isHost && gameState.phase !== "GAMEOVER"));
+
+  const me = gameState.players.find(p => p.id === myId);
+  if (!me) return;
+
+  const roleTitles = {
+    MAFIA: "🕶️ MAFIA",
+    SERIAL_KILLER: "🔪 SERIAL KILLER",
+    JESTER: "🤡 JESTER",
+    DOCTOR: "💉 DOCTOR",
+    DETECTIVE: "🔍 DETECTIVE",
+    VILLAGER: "🏡 VILLAGER"
+  };
+
+  const roleDescriptions = {
+    MAFIA: "Eliminate one townsperson each night without getting caught.",
+    SERIAL_KILLER: "Eliminate anyone each night. Eliminate both the Mafia and Town to win solo!",
+    JESTER: "Act suspicious! You win immediately if you trick the Town into voting you out during the Day!",
+    DOCTOR: "Choose one player each night to protect from attacks.",
+    DETECTIVE: "Investigate one player each night to see if they are dangerous (Mafia/SK).",
+    VILLAGER: "Complete decoy tasks at night and vote out threats during the day."
+  };
+
+  document.getElementById("myRoleName").innerText = roleTitles[me.role] || me.role;
+  document.getElementById("myRoleDesc").innerText = roleDescriptions[me.role] || "";
+
+  if (me.role === "MAFIA") {
+    const mates = gameState.players.filter(p => p.role === "MAFIA" && p.id !== myId).map(p => p.name);
+    document.getElementById("mafiaTeammates").innerText =
+      mates.length ? "Fellow Mafia: " + mates.join(", ") : "You are the solo Mafia.";
+  } else {
+    document.getElementById("mafiaTeammates").innerText = "";
+  }
+
+  document.getElementById("announcementBox").innerHTML = gameState.announcement;
+
+  const phaseTitle = document.getElementById("phaseTitle");
+  const phaseSub = document.getElementById("phaseSub");
+  const actionArea = document.getElementById("actionArea");
+
+  if (gameState.phase === "GAMEOVER") {
+    phaseTitle.innerText = "🏁 GAME OVER";
+    phaseSub.innerText = "All secret roles revealed";
+    actionArea.innerHTML = `
+      <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 text-center space-y-3">
+        <h3 class="text-lg font-extrabold text-amber-400">${gameState.winner}</h3>
+        <div class="space-y-1 text-left text-xs pt-2">
+          ${gameState.players.map(p => `
+            <div class="flex justify-between py-1 border-b border-slate-800">
+              <span>${p.alive ? "🟢" : "💀"} <b>${p.name}</b></span>
+              <span class="font-mono text-amber-300">${p.role.replace("_", " ")}</span>
+            </div>
+          `).join("")}
+        </div>
+        ${isHost ? `<button onclick="startGame()" class="w-full mt-3 py-3 rounded-xl bg-emerald-600 font-bold text-white">🔄 Play Again (Same Players)</button>` : ""}
+      </div>
+    `;
+    return;
+  }
+
+  if (!me.alive) {
+    phaseTitle.innerText = "💀 YOU ARE ELIMINATED";
+    phaseSub.innerText = "Keep a poker face while living players finish";
+    actionArea.innerHTML = `
+      <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center text-xs text-slate-400">
+        You are a ghost. Don't reveal any secrets to the living players!
+      </div>
+    `;
+    return;
+  }
+
+  /* -------- NIGHT PHASE -------- */
+  if (gameState.phase === "NIGHT") {
+    phaseTitle.innerText = `🌙 NIGHT ${gameState.round}`;
+    phaseSub.innerText = "Look at your phone & tap so nobody knows your role!";
+
+    const waitingCount = gameState.players.filter(p => p.alive && !p.nightDone).length;
+
+    if (me.nightDone) {
+      const detMsg = gameState.detectiveResult[myId]
+        ? `<div class="p-3 mb-3 rounded-xl bg-sky-950 border border-sky-500/40 text-xs text-sky-300 font-semibold">🔍 Secret Report: ${gameState.detectiveResult[myId]}</div>`
+        : "";
+      actionArea.innerHTML = `
+        ${detMsg}
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 text-center space-y-2">
+          <div class="text-emerald-400 font-bold text-sm">✅ Night Task Locked In</div>
+          <p class="text-xs text-slate-400">Keep looking at your screen until everyone finishes (${waitingCount} left)...</p>
+        </div>
+      `;
+      return;
+    }
+
+    if (me.role === "VILLAGER" || me.role === "JESTER") {
+      const codeA = Math.floor(10 + Math.random() * 89);
+      const codeB = Math.floor(10 + Math.random() * 89);
+      actionArea.innerHTML = `
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+          <p class="text-xs font-semibold text-amber-400 uppercase">🛡️ Midnight Cover Task</p>
+          <p class="text-xs text-slate-400">Tap a button below so you look just as busy on your phone as the active night roles:</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="submitNightAction('DECOY_1')" class="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-200 border border-slate-700">Lock Sector #${codeA}</button>
+            <button onclick="submitNightAction('DECOY_2')" class="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-200 border border-slate-700">Check Gate #${codeB}</button>
+          </div>
+        </div>
+      `;
+    } else {
+      const promptMap = {
+        MAFIA: "🗡️ Mafia: Select a victim to eliminate tonight:",
+        SERIAL_KILLER: "🔪 Serial Killer: Select a victim to eliminate tonight:",
+        DOCTOR: "💉 Doctor: Select a player to protect tonight:",
+        DETECTIVE: "🔍 Detective: Select a player to investigate tonight:"
+      };
+      const targets = gameState.players.filter(p => p.alive);
+      actionArea.innerHTML = `
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+          <p class="text-xs font-bold text-amber-400">${promptMap[me.role]}</p>
+          <div class="space-y-2 max-h-56 overflow-y-auto">
+            ${targets.map(t => `
+              <button onclick="submitNightAction('${t.id}')" class="w-full flex justify-between items-center px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-medium border border-slate-700">
+                <span>${t.name} ${t.id === myId ? "(You)" : ""}</span>
+                <span class="text-xs text-amber-400">Select →</span>
+              </button>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  /* -------- DAY PHASE -------- */
+  if (gameState.phase === "DAY") {
+    phaseTitle.innerText = `☀️ DAY ${gameState.round} — DISCUSSION & VOTE`;
+    phaseSub.innerText = "Discuss out loud, then cast your vote below";
+
+    const waitingVotes = gameState.players.filter(p => p.alive && p.dayVote === null).length;
+
+    if (me.dayVote !== null) {
+      actionArea.innerHTML = `
+        <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 text-center space-y-2">
+          <div class="text-emerald-400 font-bold text-sm">🗳️ Vote Recorded</div>
+          <p class="text-xs text-slate-400">Waiting for ${waitingVotes} remaining player(s) to vote...</p>
+        </div>
+      `;
+      return;
+    }
+
+    const aliveTargets = gameState.players.filter(p => p.alive && p.id !== myId);
+    actionArea.innerHTML = `
+      <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+        <p class="text-xs font-bold text-amber-400">⚖️ Vote to exile a suspected threat (beware of the Jester!):</p>
+        <div class="space-y-2 max-h-56 overflow-y-auto">
+          ${aliveTargets.map(t => `
+            <button onclick="submitDayVote('${t.id}')" class="w-full flex justify-between items-center px-4 py-3 rounded-xl bg-slate-800 hover:bg-red-950/60 text-sm font-medium border border-slate-700">
+              <span>${t.name}</span>
+              <span class="text-xs text-red-400">Vote Exile →</span>
+            </button>
+          `).join("")}
+          <button onclick="submitDayVote('SKIP')" class="w-full py-2.5 rounded-xl bg-slate-950 text-xs text-slate-400 border border-slate-800">
+            🏳️ Skip Vote (No Exile)
+          </button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function submitNightAction(targetId) {
+  sendToHost({ type: "NIGHT_ACTION", targetId });
+}
+
+function submitDayVote(targetId) {
+  sendToHost({ type: "DAY_VOTE", targetId });
+}
+
+function copyShareLink() {
+  const url = window.location.origin + window.location.pathname + "?room=" + roomCode;
+  navigator.clipboard.writeText(url).then(() => {
+    alert("Invite link copied! Send it to your friends on WhatsApp.");
+  });
+}
+</script>
+</body>
+</html>
